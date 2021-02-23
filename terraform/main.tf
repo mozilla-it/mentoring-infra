@@ -28,3 +28,31 @@ module "database-prod" {
 resource "aws_route53_zone" "primary" {
   name = "mentoring.mozilla.com"
 }
+
+# ACM
+resource "aws_acm_certificate" "mentoring_mozilla_com" {
+  domain_name       = "mentoring.mozilla.com"
+  validation_method = "DNS"
+}
+
+resource "aws_route53_record" "mentoring_mozilla_com" {
+  for_each = {
+    for dvo in aws_acm_certificate.mentoring_mozilla_com.domain_validation_options : dvo.domain_name => {
+      name   = dvo.resource_record_name
+      record = dvo.resource_record_value
+      type   = dvo.resource_record_type
+    }
+  }
+
+  allow_overwrite = true
+  name            = each.value.name
+  records         = [each.value.record]
+  ttl             = 60
+  type            = each.value.type
+  zone_id         = aws_route53_zone.primary.zone_id
+}
+
+resource "aws_acm_certificate_validation" "mentoring_mozilla_com" {
+  certificate_arn         = aws_acm_certificate.mentoring_mozilla_com.arn
+  validation_record_fqdns = [for record in aws_route53_record.mentoring_mozilla_com : record.fqdn]
+}
